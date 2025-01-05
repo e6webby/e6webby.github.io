@@ -1,5 +1,6 @@
 <html><head><base href=".">
 <title>e6webby - e621 web client</title>
+<link rel="icon" type="image/x-icon" href="https://e621.net/favicon.ico">
 <style>
 body{
     margin: 0;
@@ -455,6 +456,9 @@ button:hover {
 </div>
 <button class="theme-toggle" id="themeToggle">&#x1f319;</button>
 <div id="grid" class="grid"></div>
+<div id="loading" style="display: none; text-align: center; padding: 20px;">
+    Loading...
+</div>
 
 <!-- Modal -->
 <div id="modal" class="modal">
@@ -493,6 +497,7 @@ const tagCategories = {
   'meta': 'Metadata',
   'lore': 'Story Elements'
 };
+const AUTH_HEADER = 'Basic ' + btoa('e6-webclient:e621-safe-client');
 function parseDescription(description) {
   if (!description) return 'No description available';
   description = description.replace(/\[quote\](.*?)\[\/quote\]/g, '<div class="quote">$1</div>');
@@ -520,7 +525,8 @@ async function searchTags(query) {
   try {
     const response = await fetch(`${TAGS_API_URL}?search[name_matches]=${encodeURIComponent(query + '*')}&limit=10&search[order]=count`, {
       headers: {
-        'User-Agent': 'SafeViewer/1.0'
+        'User-Agent': 'SafeViewer/1.0',
+        'Authorization': AUTH_HEADER
       }
     });
     if (!response.ok) throw new Error('Network response was not ok');
@@ -568,26 +574,20 @@ function openModal(post) {
   const mediaContainer = document.getElementById('modal-media-container');
   const modalDesc = document.getElementById('modal-description');
   const modalTags = document.getElementById('modal-tags');
-  
   mediaContainer.innerHTML = '';
-  
   const downloadBtn = document.createElement('a');
   downloadBtn.className = 'download-btn';
   downloadBtn.href = post.file.ext === 'webm' ? post.file.url.replace('.webm', '.mp4') : post.file.url;
   downloadBtn.target = '_blank';
   downloadBtn.textContent = 'Download';
   mediaContainer.appendChild(downloadBtn);
-
   const mediaElement = createMediaElement(post);
   mediaContainer.appendChild(mediaElement);
-  
   if (mediaElement.tagName === 'VIDEO') {
     mediaElement.play().catch(e => console.log('Auto-play prevented:', e));
   }
-
   modalDesc.innerHTML = parseDescription(post.description);
   modalTags.innerHTML = '';
-
   Object.entries(post.tags).forEach(([category, tags]) => {
     if (tags.length > 0) {
       const categoryHeader = document.createElement('h4');
@@ -595,12 +595,10 @@ function openModal(post) {
       categoryHeader.style.color = '#0066cc';
       categoryHeader.style.marginTop = '20px';
       modalTags.appendChild(categoryHeader);
-
       const tagContainer = document.createElement('div');
       tagContainer.style.display = 'flex';
       tagContainer.style.flexWrap = 'wrap';
       tagContainer.style.gap = '8px';
-      
       tags.forEach(tag => {
         const tagSpan = document.createElement('span');
         tagSpan.className = 'tag';
@@ -616,9 +614,7 @@ function openModal(post) {
       modalTags.appendChild(tagContainer);
     }
   });
-
   modal.style.display = 'block';
-
   const shareButton = document.createElement('button');
   shareButton.className = 'share-btn';
   shareButton.textContent = 'Share';
@@ -686,7 +682,7 @@ async function searchMedia(newSearch = false) {
         } else {
           const img = document.createElement('img');
           img.src = post.sample.url;
-          img.alt = post.description || 'Safe e621 image';
+          img.alt = post.description || ' e621 image';
           gridItem.appendChild(img);
         }
         const downloadBtn = document.createElement('a');
@@ -724,15 +720,13 @@ document.addEventListener('keydown', event => {
     closeModal();
   }
 });
-
 function proceedToSite() {
   document.querySelector('.warning').style.display = 'none';
+  searchMedia(true);
 }
-
 function redirectToGoogle() {
   window.location.href = 'https://www.youtube.com/watch?v=bFcG-q4eTSY';
 }
-
 function toggleTheme() {
   currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
   document.body.className = `${currentTheme}-theme`;
@@ -742,9 +736,6 @@ function toggleTheme() {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('themeToggle').onclick = toggleTheme;
   document.body.className = `${currentTheme}-theme`;
-  searchMedia(true);
-});
-searchMedia(true);
-</script>
+});</script>
 </body>
 </html>
