@@ -1,0 +1,271 @@
+<html><head><base href="." /><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Image Transformer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+    color: #fff;
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.container {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    max-width: 800px;
+    width: 100%;
+    text-align: center;
+}
+
+#dropZone {
+    border: 3px dashed #666;
+    border-radius: 10px;
+    padding: 40px;
+    margin: 20px 0;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+#dropZone.dragover {
+    border-color: #4CAF50;
+    background: rgba(76, 175, 80, 0.1);
+}
+
+#canvas {
+    margin-top: 20px;
+    background: transparent;
+}
+
+.button {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin: 10px;
+    transition: all 0.3s ease;
+}
+
+.button:hover {
+    background: #45a049;
+    transform: scale(1.05);
+}
+
+#fileInput {
+    display: none;
+}
+
+#progress {
+    margin-top: 20px;
+    font-size: 18px;
+    color: #4CAF50;
+}
+</style></head><body>
+<div class="container">
+    <h1>Image Transformer</h1>
+    <p>Drop an image, paste it, or click to upload. The image will be resized to 512x512 and transformed with random transparency!</p>
+    
+    <div id="dropZone" onclick="document.getElementById('fileInput').click()">
+        Drop image here or click to upload
+    </div>
+    
+    <input type="file" id="fileInput" accept="image/*">
+    <button class="button" onclick="resetImage()">Reset Image</button>
+    <button class="button" onclick="generateBatch()">Generate 6 Images</button>
+    
+    <div id="progress"></div>
+    
+    <div>
+        <canvas id="canvas" width="512" height="512"></canvas>
+    </div>
+</div>
+
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const progress = document.getElementById('progress');
+
+let currentImage = null;
+let randomImage = null;
+let currentTransparency = 1;
+let randomCorner = null;
+
+function generateRandomText() {
+    const words = ['Lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', 'adipiscing', 'elit', 
+                   'sed', 'do', 'eiusmod', 'tempor', 'incididunt', 'ut', 'labore', 'et', 'dolore', 
+                   'magna', 'aliqua'];
+    const length = Math.floor(Math.random() * 5) + 3;
+    let text = '';
+    for(let i = 0; i < length; i++) {
+        text += words[Math.floor(Math.random() * words.length)] + ' ';
+    }
+    return text.trim();
+}
+
+async function addRandomImage() {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.onload = () => {
+            randomImage = img;
+            const corners = [
+                { x: 10, y: 10, textX: 10, textY: 130 },
+                { x: 402, y: 10, textX: 402, textY: 130 },
+                { x: 10, y: 402, textX: 10, textY: 382 },
+                { x: 402, y: 402, textX: 402, textY: 382 }
+            ];
+            randomCorner = corners[Math.floor(Math.random() * corners.length)];
+            resolve();
+        };
+        img.src = 'https://picsum.photos/128?' + new Date().getTime();
+    });
+}
+
+async function generateBatch() {
+    if (!currentImage) {
+        alert('Please upload an image first!');
+        return;
+    }
+
+    const zip = new JSZip();
+    const folder = zip.folder("transformed_images");
+    
+    progress.textContent = "Generating images...";
+    
+    for (let i = 0; i < 6; i++) {
+        await addRandomImage();
+        transformImage();
+        
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        folder.file(`transformed_${i + 1}.png`, blob);
+        
+        progress.textContent = `Generated ${i + 1}/6 images...`;
+    }
+    
+    progress.textContent = "Creating ZIP file...";
+    
+    const content = await zip.generateAsync({type: "blob"});
+    saveAs(content, "transformed_images.zip");
+    
+    progress.textContent = "ZIP file downloaded!";
+    setTimeout(() => progress.textContent = "", 5);
+}
+
+document.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (const item of items) {
+        if (item.type.indexOf('image') === 0) {
+            const file = item.getAsFile();
+            processImage(file);
+        }
+    }
+});
+
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+});
+
+dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('dragover');
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    processImage(file);
+});
+
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    processImage(file);
+});
+
+function processImage(file) {
+    if (!file.type.startsWith('image/')) {
+        alert('Please upload an image file!');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const img = new Image();
+        img.onload = async () => {
+            currentImage = img;
+            await addRandomImage();
+            transformImage();
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function transformImage() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    if (currentImage) {
+        // Generate random transparency between 5% and 20%
+        currentTransparency = Math.random() * 15 + 5;
+        
+        // Create an offscreen canvas for the main image processing
+        const offscreen = document.createElement('canvas');
+        offscreen.width = 512;
+        offscreen.height = 512;
+        const offCtx = offscreen.getContext('2d');
+        
+        // Draw the image
+        offCtx.drawImage(currentImage, 0, 0, 512, 512);
+        
+        // Apply saturation based on transparency (higher transparency = lower saturation)
+        const saturationValue = 100 - (currentTransparency * 4); // Inverse relationship
+        offCtx.filter = `saturate(${saturationValue}%)`;
+        offCtx.drawImage(offscreen, 0, 0);
+        offCtx.filter = 'none';
+        
+        // Draw the processed image with transparency
+        ctx.globalAlpha = currentTransparency / 100;
+        ctx.drawImage(offscreen, 0, 0);
+        ctx.globalAlpha = 1;
+        
+        if (randomImage && randomCorner) {
+            ctx.drawImage(randomImage, randomCorner.x, randomCorner.y, 100, 100);
+            
+            const randomText = generateRandomText();
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Arial';
+            ctx.textAlign = randomCorner.x > 256 ? 'right' : 'left';
+            ctx.fillText(randomText, randomCorner.textX, randomCorner.textY);
+        }
+
+        ctx.fillStyle = 'grey';
+        ctx.font = 'bold 30px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('MEWZAZ', 20, 40);
+    }
+}
+
+function resetImage() {
+    if (currentImage) {
+        currentTransparency = 100;
+        addRandomImage().then(transformImage);
+    }
+}
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    document.body.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+});
+</script></body></html>
